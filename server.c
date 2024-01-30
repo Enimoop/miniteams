@@ -11,16 +11,18 @@
 
 char* message;
 int ind;
+int pidcli;
+
 
 
 
 char* detect_language(char* message) {
 
-#define NUM_LANGUAGES 4
-#define NUM_LETTERS 26
+    #define NUM_LANGUAGES 4
+    #define NUM_LETTERS 26
 
 
-const double avg_frequencies[NUM_LANGUAGES][NUM_LETTERS] = {
+    const double avg_frequencies[NUM_LANGUAGES][NUM_LETTERS] = {
     // Français
     {8.13, 0.94, 3.26, 3.67, 17.21, 1.06, 1.27, 0.92, 7.34, 0.31, 0.05, 6.01, 2.96, 7.13, 5.26, 3.01, 0.99, 6.55, 8.08, 7.07, 5.74, 1.32, 0.04, 0.45, 0.3, 0.12},
     // Anglais
@@ -79,43 +81,46 @@ const double avg_frequencies[NUM_LANGUAGES][NUM_LETTERS] = {
 
 char* heure()
 {
-	static char buffer[80];
-	time_t timestamp = time(NULL);
+    static char buffer[80];
+    time_t timestamp = time(NULL);
 
-	strftime(buffer, sizeof(buffer),"%X", localtime(&timestamp));
-	return buffer;
+    strftime(buffer, sizeof(buffer),"%X", localtime(&timestamp));
+    return buffer;
 }
 
 void conversation_log(const char* message)
 {
-	FILE *fichier;
+    FILE *fichier;
 
-	fichier = fopen("conversation.log","a");
+    fichier = fopen("conversation.log", "at, ccs=UTF-8");
 
-	if (fichier == NULL) {
-		fprintf(stderr, "Peut pas ouvrir le fichier\n");
-		return;
-	}
+    if (fichier == NULL) {
+        fprintf(stderr, "Peut pas ouvrir le fichier avec UTF-8\n");
+        return;
+    }
 
-	fprintf(fichier,"[%s] %s\n", heure(), message);
+    fprintf(fichier,"[%s] %s\n", heure(), message);
 
-	fclose(fichier);
+    fclose(fichier);
 }
 
 void stock_message(char** message, char c)
 {
 
+    static int current_size = 1024;
+
     if(c == 3 || c == 4){
-    ind = 0;
-    *message = malloc(1024);
-    memset(*message,'\0',1024);
-    return;  
+        ind = 0;
+        *message = malloc(current_size);
+        memset(*message,'\0',current_size);
+        return;    
     }
 
     (*message)[ind] = c;
     ind++;
+
    
- 
+
 
     if (*message == NULL) {
         fprintf(stderr, "Erreur lors du realloc pour message\n");
@@ -128,28 +133,32 @@ void stock_message(char** message, char c)
 
 char convert_bin_to_char(char* bin_mes)
 {
-	int i=0;
-	int c = strlen(bin_mes);
-	char mes;
-	while(i<c)
-	{
-		int b =0;
-		int size = 8;
+    int i=0;
+    int c = strlen(bin_mes);
+    char mes;
+    while(i<c)
+    {
+        int b =0;
+        int size = 8;
 
-		while(size>=1)
-		{
-			size--;
-			b |= ((bin_mes[i] - '0') << size);
-			i++;
-		}
-		mes = b;
-
-	}
-
-	return mes;
+        while(size>=1)
+        {
+            size--;
+            b |= ((bin_mes[i] - '0') << size);
+            i++;
+        }
+        mes = b;
+   
+    }
+   
+    return mes;
 }
 
-
+void send_signal(int b, int pid) {
+    if (b == 1) {
+        kill(pid, SIGUSR1);
+    }
+}
 
 void trad_binaire(int x)
 {
@@ -166,56 +175,63 @@ void trad_binaire(int x)
 
         if (i >= 8)
         {
-        	int c = convert_bin_to_char(bin_mes);
+            int c = convert_bin_to_char(bin_mes);
 
-       
-
-        if( c == 4)
-        {
-			printf("[From client %s] ", message);
-			free(message);
-       
-       
-        }
-
-        if (c == 3)
+            if(pidcli != 0)
             {
-				conversation_log(message);
-				printf("%s",message);
-				putchar('\n');
-				printf("Language : %s", detect_language(message));
-				putchar('\n');
-				free(message);
-       
+                send_signal(pidcli,SIGUSR1);
+            }
+
+            if( c == 4)
+            {
+                printf("[From client %s] ", message);
+                pidcli = atoi(message);
+                free(message);
+               
+                   
+            }
+
+            if (c == 3)
+            {
+                conversation_log(message);
+                printf("%s",message);
+                putchar('\n');
+                printf("Language : %s", detect_language(message));
+                putchar('\n');
+                free(message);
+                   
             }
 
 
-			stock_message(&message, c);
+            stock_message(&message, c);
             fflush(stdout);
 
 
              i = 0;
            
         }
-   
+       
     }
 }
 
 
+
 int main(void)
 {
-	ind = 0;
-	message = malloc(1024);
-	printf("Miniteams starting...\n");
-	printf(" My PID is %i\n",getpid());
-	printf("Waiting for new messages\n");
+    ind = 0;
+    pidcli = 0;
+    message = malloc(1024);
+    printf("Miniteams starting...\n");
+    printf(" My PID is %i\n",getpid());
+    printf("Waiting for new messages\n");
 
 
-	signal(SIGUSR1,trad_binaire);
-	signal(SIGUSR2,trad_binaire);
+    signal(SIGUSR1,trad_binaire);
+    signal(SIGUSR2,trad_binaire);
 
-	while(1)
-	{
-		pause();
-	}
+    while(1)
+    {
+    usleep(10000);
+        pause();
+    }
 }
